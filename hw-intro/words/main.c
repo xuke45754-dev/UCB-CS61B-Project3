@@ -45,9 +45,31 @@ WordCount *word_counts = NULL;
  * Useful functions: fgetc(), isalpha().
  */
 int num_words(FILE* infile) {
-  int num_words = 0;
-
-  return num_words;
+  char c;
+  int total_words = 0;
+  bool in_word = false;
+  int word_len = 0;
+  
+  while ((c = fgetc(infile)) != EOF) {
+    if (isalpha(c)) {
+      if (!in_word) {
+        in_word = true;
+        word_len = 0;
+      }
+      word_len++;
+    } else {
+      if (in_word && word_len > 1) {
+        total_words++;
+      }
+      in_word = false;
+      word_len = 0;
+    }
+  }
+  if (in_word && word_len > 1) {
+    total_words++;
+  }
+  
+  return total_words;
 }
 
 /*
@@ -62,6 +84,34 @@ int num_words(FILE* infile) {
  * and 0 otherwise.
  */
 int count_words(WordCount **wclist, FILE *infile) {
+  if (wclist == NULL || infile == NULL) {
+    return 1;
+  }
+  char buff[MAX_WORD_LEN-1];
+  int index = 0;
+  char c;
+  bool in_word = false; 
+  while ((c = fgetc(infile)) != EOF) {
+    if (isalpha(c)) {
+      if (!in_word) {
+        in_word = true;
+        index = 0;
+      }
+      if (index < MAX_WORD_LEN ) {
+        buff[index++] = tolower(c);
+      }
+    } else {
+      if (in_word) {
+        buff[index] = '\0';
+          if (add_word(wclist, buff) != 0) {
+            return 1;
+          }
+        in_word = false;
+        index = 0;
+      }
+    }        
+  }
+
   return 0;
 }
 

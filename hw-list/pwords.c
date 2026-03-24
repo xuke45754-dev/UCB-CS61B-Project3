@@ -35,6 +35,22 @@
 /*
  * main - handle command line, spawning one thread per file.
  */
+
+typedef struct{
+  char* file_path;
+  word_count_t* word_counts;
+} thread_data_t; 
+
+void* count_file_words(void* arg){
+    thread_data_t* data = (thread_data_t*)arg; 
+    FILE* fp = fopen(data->file_path, "r");
+    count_words(data->word_counts, fp);
+    fclose(fp);
+    free(data);
+    pthread_exit(NULL);
+} 
+
+
 int main(int argc, char* argv[]) {
   /* Create the empty data structure. */
   word_count_list_t word_counts;
@@ -44,7 +60,34 @@ int main(int argc, char* argv[]) {
     /* Process stdin in a single thread. */
     count_words(&word_counts, stdin);
   } else {
-    /* TODO */
+    int num_files = argc - 1;
+    pthread_t* threads = malloc(num_files * sizeof(pthread_t));
+    if (threads == NULL) {
+        fprintf(stderr, "Malloc failed for threads array\n");
+        exit(EXIT_FAILURE);
+    }
+    for (int i = 0; i < num_files; i++) {
+      thread_data_t* data = malloc(sizeof(thread_data_t));
+      if (data == NULL) {
+        fprintf(stderr, "Malloc failed for thread %d\n", i);
+        free(threads);
+        exit(EXIT_FAILURE);
+        }
+      data->file_path = argv[i + 1];
+      data->word_counts = &word_counts;
+      int rc = pthread_create(&threads[i], NULL, count_file_words, (void*)data);
+      if (rc != 0) {
+          fprintf(stderr, "Failed to create thread %d: %d\n", i, rc);
+          free(data);
+          free(threads);
+          exit(EXIT_FAILURE);
+      }
+    }
+
+    for (int i = 0; i < num_files; i++) {
+      pthread_join(threads[i], NULL);
+    }
+    free(threads);
   }
 
   /* Output final result of all threads' work. */

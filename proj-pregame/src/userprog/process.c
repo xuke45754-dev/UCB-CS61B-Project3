@@ -126,6 +126,7 @@ static void start_process(void* file_name_) {
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
   asm volatile("movl %0, %%esp; jmp intr_exit" : : "g"(&if_) : "memory");
+  //asm volatile("movl %0, %%esp; jmp intr_exit" : : "g"((uint8_t *)t + PGSIZE - sizeof(if_)) : "memory");
   NOT_REACHED();
 }
 
@@ -472,8 +473,15 @@ static bool setup_stack(void** esp) {
   kpage = palloc_get_page(PAL_USER | PAL_ZERO);
   if (kpage != NULL) {
     success = install_page(((uint8_t*)PHYS_BASE) - PGSIZE, kpage, true);
-    if (success)
-      *esp = PHYS_BASE;
+    if (success){
+      *esp = PHYS_BASE-20;
+      uint32_t *stack = (uint32_t *) *esp;
+      stack[0] = 0;   
+      stack[1] = 1;   
+      stack[2] = 0; 
+      stack[3] = 0; 
+      stack[4] = 0;
+    }
     else
       palloc_free_page(kpage);
   }
