@@ -70,7 +70,7 @@ void halt(void) {
   syscall0(SYS_HALT);
   NOT_REACHED();
 }
-
+//work
 void exit(int status) {
   syscall1(SYS_EXIT, status);
   NOT_REACHED();

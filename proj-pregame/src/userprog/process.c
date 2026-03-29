@@ -260,7 +260,7 @@ struct Elf32_Phdr {
 #define PF_W 2 /* Writable. */
 #define PF_R 4 /* Readable. */
 
-static bool setup_stack(void** esp);
+static bool setup_stack(const char* cmd_line,void** esp);
 static bool validate_segment(const struct Elf32_Phdr*, struct file*);
 static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t read_bytes,
                          uint32_t zero_bytes, bool writable);
@@ -269,13 +269,19 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
-bool load(const char* file_name, void (**eip)(void), void** esp) {
+bool load(const char* cmd_line, void (**eip)(void), void** esp) {
   struct thread* t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file* file = NULL;
   off_t file_ofs;
   bool success = false;
+
+  /*提取文件名*/
+  char file_name[128];
   int i;
+  for (i = 0; cmd_line[i] != ' ' && cmd_line[i] != 0; i++)
+    file_name[i] = cmd_line[i];
+  file_name[i] = 0;
 
   /* Allocate and activate page directory. */
   t->pcb->pagedir = pagedir_create();
@@ -349,7 +355,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   }
 
   /* Set up stack. */
-  if (!setup_stack(esp))
+  if (!setup_stack(cmd_line,esp))
     goto done;
 
   /* Start address. */
@@ -466,25 +472,62 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
 
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
-static bool setup_stack(void** esp) {
+static bool setup_stack(const char* cmd_line , void** esp) {
   uint8_t* kpage;
   bool success = false;
+  char* cmd_copy = palloc_get_page(0);
+  if (cmd_copy == NULL) return false;
+  strlcpy(cmd_copy, cmd_line, PGSIZE);
 
   kpage = palloc_get_page(PAL_USER | PAL_ZERO);
   if (kpage != NULL) {
     success = install_page(((uint8_t*)PHYS_BASE) - PGSIZE, kpage, true);
     if (success){
-      *esp = PHYS_BASE-20;
-      uint32_t *stack = (uint32_t *) *esp;
-      stack[0] = 0;   
-      stack[1] = 1;   
-      stack[2] = 0; 
-      stack[3] = 0; 
-      stack[4] = 0;
-    }
-    else
+
+      size_t used = 0;
+      char* saveptr = NULL;
+      char* token;
+      const int MAX_ARGS = 128;
+      char* argv_user[MAX_ARGS];
+      int argc = 0;
+
+      for (token = strtok_r(cmd_copy, " \t\r\n", &saveptr); token != NULL;
+        token = strtok_r(NULL, " \t\r\n", &saveptr)) {
+          size_t len = strlen(token) + 1;
+          if (argc < MAX_ARGS) {
+          used += len;
+          /* copy string to kpage at top - used */
+          memcpy(kpage + PGSIZE - used, token, len);
+          argv_user[argc++] = (char*)(PHYS_BASE - used);
+          }
+      }  
+
+      size_t pad = (4-(used % 4)) %4;
+      used += pad ;
+
+      used += sizeof(char*);
+      *(uint32_t*)(kpage + PGSIZE - used) = 0;
+
+      for (int i = argc - 1; i >= 0; i--) {
+        used += sizeof(char*);
+        *(uint32_t*)(kpage + PGSIZE - used) = (uint32_t)argv_user[i];
+      }
+
+      uint32_t argv_addr = (uint32_t)(PHYS_BASE - used);
+      used += sizeof(char*);
+      *(uint32_t*)(kpage + PGSIZE - used) = argv_addr;
+
+      used += sizeof(int);
+      *(uint32_t*)(kpage + PGSIZE - used) = (uint32_t)argc;
+
+      used += sizeof(void*);
+      *(uint32_t*)(kpage + PGSIZE - used) = 0;
+
+      *esp = (void*)(PHYS_BASE - used);
+  }else
       palloc_free_page(kpage);
   }
+  palloc_free_page(cmd_copy)
   return success;
 }
 
