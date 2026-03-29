@@ -527,7 +527,7 @@ static bool setup_stack(const char* cmd_line , void** esp) {
   }else
       palloc_free_page(kpage);
   }
-  palloc_free_page(cmd_copy)
+  palloc_free_page(cmd_copy);
   return success;
 }
 
